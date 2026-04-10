@@ -36,6 +36,7 @@ export function WholesalerDashboard() {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [monthlyEarnings, setMonthlyEarnings] = useState(0);
   const [completedOrdersCount, setCompletedOrdersCount] = useState(0);
+  const [expandedBidId, setExpandedBidId] = useState<string | null>(null);
 
   useEffect(() => {
     // Fetch active bids from Firestore
@@ -218,6 +219,7 @@ export function WholesalerDashboard() {
                 <div
                   key={bid.id}
                   className="bg-white rounded-xl p-5 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setExpandedBidId(expandedBidId === bid.id ? null : bid.id)}
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div>
@@ -253,12 +255,39 @@ export function WholesalerDashboard() {
                       </div>
                     </div>
                     <button
-                      onClick={() => navigate(`/wholesaler/send-quotation/${bid.id}`)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/wholesaler/send-quotation/${bid.id}`);
+                      }}
                       className="bg-[#E8453C] text-white px-6 py-2 rounded-lg hover:bg-[#d43d35] transition-colors"
                     >
                       Submit Quote
                     </button>
                   </div>
+
+                  {/* Inline Items Breakdown */}
+                  {expandedBidId === bid.id && (
+                    <div className="mt-4 pt-3 border-t border-gray-100 bg-gray-50 rounded-lg p-3">
+                      <h4 className="text-[11px] font-bold text-gray-500 uppercase mb-2">Requested Items</h4>
+                      <div className="space-y-2">
+                        {bid.items.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border border-gray-100">
+                            <p className="text-sm font-medium text-[#1A1A1A]">{item.product || item.productName}</p>
+                            <div className="text-right">
+                              <p className="text-xs text-gray-600 font-medium">
+                                {item.quantity || item.requestedQty} {item.unit}
+                              </p>
+                              {(item.targetPrice || item.price) && (
+                                <p className="text-[11px] font-bold text-[#E8453C] mt-0.5">
+                                  Asking: ₹{item.targetPrice || item.price}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))
             )}

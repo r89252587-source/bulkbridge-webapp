@@ -173,7 +173,14 @@ export function QuotationsComparison() {
             <div className="space-y-2">
               {bid.items.map((item: any, i: number) => (
                 <div key={i} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
-                  <p className="text-[13px] font-bold text-[#1A1A1A]">{item.product || item.productName}</p>
+                  <div>
+                    <p className="text-[13px] font-bold text-[#1A1A1A]">{item.product || item.productName}</p>
+                    {(item.targetPrice || item.price) && (
+                      <p className="text-[11px] font-bold text-[#E8453C] mt-0.5">
+                        Asking: ₹{item.targetPrice || item.price}
+                      </p>
+                    )}
+                  </div>
                   <p className="text-[12px] font-medium text-[#6B6B6B] bg-white px-2.5 py-1 rounded shadow-sm border border-gray-200">
                     {item.quantity || item.requestedQty} {item.unit}
                   </p>

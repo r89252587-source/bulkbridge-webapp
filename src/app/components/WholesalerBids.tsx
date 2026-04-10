@@ -22,6 +22,7 @@ export function WholesalerBids() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "completed">("all");
+  const [expandedBidId, setExpandedBidId] = useState<string | null>(null);
 
   useEffect(() => {
     // Fetch all active bids from Firestore — wholesalers see all open bids
@@ -163,7 +164,11 @@ export function WholesalerBids() {
           </div>
         ) : (
           filteredBids.map((bid) => (
-            <div key={bid.id} className="bg-white rounded-[12px] p-5 shadow-sm">
+            <div 
+              key={bid.id} 
+              onClick={() => setExpandedBidId(expandedBidId === bid.id ? null : bid.id)}
+              className="bg-white rounded-[12px] p-5 shadow-sm cursor-pointer hover:shadow-md transition-all"
+            >
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="font-bold text-[#1A1A1A] mb-1">
@@ -210,17 +215,44 @@ export function WholesalerBids() {
                 </div>
                 {bid.status === "active" ? (
                   <button
-                    onClick={() => navigate(`/wholesaler/send-quotation/${bid.id}`)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/wholesaler/send-quotation/${bid.id}`);
+                    }}
                     className="bg-[#E8453C] text-white px-6 py-2 rounded-[12px] font-medium hover:bg-[#d63d33] transition-colors"
                   >
                     Submit Quote
                   </button>
                 ) : (
-                  <button className="bg-gray-200 text-gray-600 px-6 py-2 rounded-[12px] font-medium cursor-not-allowed">
+                  <button onClick={(e) => e.stopPropagation()} className="bg-gray-200 text-gray-600 px-6 py-2 rounded-[12px] font-medium cursor-not-allowed">
                     Completed
                   </button>
                 )}
               </div>
+
+              {/* Inline Items Breakdown */}
+              {expandedBidId === bid.id && (
+                <div className="mt-4 pt-3 border-t border-gray-100 bg-gray-50 rounded-lg p-3">
+                  <h4 className="text-[11px] font-bold text-gray-500 uppercase mb-2">Requested Items</h4>
+                  <div className="space-y-2">
+                    {bid.items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-white p-2 rounded shadow-sm border border-gray-100">
+                        <p className="text-sm font-medium text-[#1A1A1A]">{item.product || item.productName}</p>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-600 font-medium">
+                            {item.quantity || item.requestedQty} {item.unit}
+                          </p>
+                          {(item.targetPrice || item.price) && (
+                            <p className="text-[11px] font-bold text-[#E8453C] mt-0.5">
+                              Asking: ₹{item.targetPrice || item.price}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ))
         )}
