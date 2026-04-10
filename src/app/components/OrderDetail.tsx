@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ArrowLeft, MapPin, Building2, CheckCircle2, Package, Truck, Home, Loader2 } from "lucide-react";
-import { doc, getDoc } from "firebase/firestore";
+import { ArrowLeft, MapPin, Building2, CheckCircle2, Package, Truck, Home, Loader2, KeyRound } from "lucide-react";
+import { doc, getDoc, updateDoc, addDoc, collection } from "firebase/firestore";
 import { db } from "../../lib/firebase";
+import { useAuth } from "../context/AuthContext";
+
 
 interface OrderItem {
   id?: string;
@@ -17,6 +19,13 @@ export function OrderDetail() {
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<any>(null);
   const [deliveryMethod, setDeliveryMethod] = useState<"delivery" | "pickup">("delivery");
+  const { user } = useAuth();
+  const [updating, setUpdating] = useState(false);
+  const [enteredOtp, setEnteredOtp] = useState("");
+  const [otpError, setOtpError] = useState("");
+
+  const isWholesaler = user?.userType === "wholesaler" || (order && user?.id === order.wholesalerId);
+  const isShopkeeper = user?.userType === "shopkeeper" || (order && user?.id === order.shopkeeperId);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -73,10 +82,80 @@ export function OrderDetail() {
 
   const statusSteps = [
     { label: "Order Placed", date: new Date(order.createdAt).toLocaleDateString(), completed: true, icon: Package },
-    { label: "Order Confirmed", date: new Date(order.createdAt).toLocaleDateString(), completed: true, icon: CheckCircle2 },
-    { label: "Out for Delivery", date: "Scheduled", completed: order.status === "Shipped" || order.status === "Delivered", icon: Truck },
-    { label: "Delivered", date: "Pending", completed: order.status === "Delivered", icon: Home },
+    { label: "Order Confirmed", date: new Date(order.createdAt).toLocaleDateString(), completed: order.status !== "Pending", icon: CheckCircle2 },
+    { label: "Out for Delivery", date: order.status === "Shipped" || order.status === "Delivered" ? new Date().toLocaleDateString() : "Scheduled", completed: order.status === "Shipped" || order.status === "Delivered", icon: Truck },
+    { label: "Delivered", date: order.status === "Delivered" ? new Date().toLocaleDateString() : "Pending", completed: order.status === "Delivered", icon: Home },
   ];
+
+  const handleUpdateStatus = async (newStatus: string) => {
+    if (!orderId || !user) return;
+    setUpdating(true);
+    try {
+      await updateDoc(doc(db, "orders", orderId), { status: newStatus });
+      setOrder({ ...order, status: newStatus });
+      
+      // Notify shopkeeper
+      if (newStatus === "Shipped") {
+         await addDoc(collection(db, "notifications"), {
+          userId: order.shopkeeperId,
+          type: "order",
+          title: "Order Shipped!",
+          message: `Your order #${orderId.slice(-6).toUpperCase()} is out for delivery.`,
+          createdAt: new Date().toISOString(),
+          read: false,
+          actionRoute: `/order/${orderId}`,
+        });     
+      } else if (newStatus === "Cancelled") {
+         await addDoc(collection(db, "notifications"), {
+          userId: order.shopkeeperId,
+          type: "order",
+          title: "Order Cancelled",
+          message: `Your order #${orderId.slice(-6).toUpperCase()} was cancelled by the wholesaler.`,
+          createdAt: new Date().toISOString(),
+          read: false,
+          actionRoute: `/order/${orderId}`,
+        });   
+      }
+    } catch (error) {
+      console.error("Error updating status:", error);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!enteredOtp) {
+      setOtpError("Please enter OTP");
+      return;
+    }
+    if (enteredOtp !== order.deliveryOtp) {
+      setOtpError("Invalid OTP. Please check with shopkeeper.");
+      return;
+    }
+
+    setOtpError("");
+    setUpdating(true);
+    try {
+      await updateDoc(doc(db, "orders", orderId), { status: "Delivered" });
+      setOrder({ ...order, status: "Delivered" });
+      
+      // Notify shopkeeper
+      await addDoc(collection(db, "notifications"), {
+        userId: order.shopkeeperId,
+        type: "order",
+        title: "Order Delivered",
+        message: `Your order #${orderId.slice(-6).toUpperCase()} has been successfully delivered.`,
+        createdAt: new Date().toISOString(),
+        read: false,
+        actionRoute: `/order/${orderId}`,
+      });
+    } catch (error) {
+      console.error("Error verifying OTP:", error);
+      setOtpError("Failed to update order");
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F5F5F5] pb-6">
@@ -251,6 +330,83 @@ export function OrderDetail() {
             })}
           </div>
         </div>
+
+        {/* Order Actions based on User Type and Status */}
+        {order.status !== "Delivered" && order.status !== "Cancelled" && (
+          <div className="bg-white rounded-xl p-5 shadow-sm space-y-4">
+            
+            {/* ====== WHOLESALER CONTROLS ====== */}
+            {isWholesaler && (
+              <div>
+                <h3 className="text-[#1A1A1A] mb-4 font-bold border-b pb-2">Wholesaler Actions</h3>
+                
+                {order.status === "Confirmed" && (
+                  <div className="flex gap-3 mt-4">
+                    <button 
+                      onClick={() => handleUpdateStatus("Cancelled")}
+                      disabled={updating}
+                      className="flex-1 py-3 border border-red-200 text-red-600 rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                      Cancel Order
+                    </button>
+                    <button 
+                      onClick={() => handleUpdateStatus("Shipped")}
+                      disabled={updating}
+                      className="flex-1 py-3 bg-[#E8453C] text-white rounded-xl hover:bg-[#d43d35] transition-colors disabled:opacity-50"
+                    >
+                      {updating ? "Updating..." : "Mark as Shipped"}
+                    </button>
+                  </div>
+                )}
+                
+                {order.status === "Shipped" && (
+                  <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                    <p className="text-sm text-gray-700 mb-3">
+                      To complete delivery, ask the shopkeeper for the 6-digit Delivery OTP.
+                    </p>
+                    <div className="flex gap-3">
+                      <input 
+                        type="text" 
+                        maxLength={6}
+                        placeholder="Enter 6-digit OTP"
+                        value={enteredOtp}
+                        onChange={(e) => setEnteredOtp(e.target.value.replace(/\D/g, ''))}
+                        className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-[#E8453C]"
+                      />
+                      <button 
+                        onClick={handleVerifyOtp}
+                        disabled={updating || enteredOtp.length !== 6}
+                        className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 font-medium"
+                      >
+                        {updating ? "Verifying..." : "Verify & Deliver"}
+                      </button>
+                    </div>
+                    {otpError && <p className="text-red-500 text-xs mt-2">{otpError}</p>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ====== SHOPKEEPER CONTROLS ====== */}
+            {isShopkeeper && order.status === "Shipped" && order.deliveryOtp && (
+              <div>
+                 <h3 className="text-[#1A1A1A] mb-3 font-bold border-b pb-2">Delivery OTP</h3>
+                 <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 text-center">
+                    <KeyRound className="mx-auto text-green-600 mb-2" size={32} />
+                    <p className="text-sm text-gray-600 mb-2">Share this PIN with the delivery executive</p>
+                    <p className="text-4xl font-mono font-bold tracking-[0.25em] text-green-700">{order.deliveryOtp}</p>
+                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {order.status === "Cancelled" && (
+           <div className="bg-red-50 border border-red-200 p-4 rounded-xl text-center">
+             <p className="text-red-700 font-medium">This order was cancelled.</p>
+           </div>
+        )}
+
 
         {/* Action Buttons */}
         <div className="flex gap-3">

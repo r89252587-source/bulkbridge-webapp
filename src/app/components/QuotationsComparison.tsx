@@ -73,6 +73,9 @@ export function QuotationsComparison() {
     setConfirming(true);
     try {
       // 1. Create the Order
+      // Generate a random 6-digit OTP
+      const deliveryOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
       const newOrder = {
         bidId: orderId,
         quotationId: selectedQuote.id,
@@ -84,7 +87,8 @@ export function QuotationsComparison() {
         status: "Confirmed",
         createdAt: new Date().toISOString(),
         items: selectedQuote.items,
-        deliveryDays: selectedQuote.deliveryDays
+        deliveryDays: selectedQuote.deliveryDays,
+        deliveryOtp: deliveryOtp
       };
       
       const orderDoc = await addDoc(collection(db, "orders"), newOrder);
