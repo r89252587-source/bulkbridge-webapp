@@ -319,7 +319,7 @@ export function WholesalerDashboard() {
                   <div className="pt-3 border-t border-gray-100">
                     <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm ${getStatusColor(order.status)}`}>
                       {getStatusIcon(order.status)}
-                      {order.status}
+                      {order.status === "Shipped" ? "Out for Delivery" : order.status}
                     </span>
                   </div>
                 </div>

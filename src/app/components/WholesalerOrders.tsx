@@ -146,7 +146,7 @@ export function WholesalerOrders() {
               { key: "all", label: `All (${stats.total})` },
               { key: "pending", label: `Pending (${stats.pending})` },
               { key: "confirmed", label: "Confirmed" },
-              { key: "shipped", label: "Shipped" },
+              { key: "shipped", label: "Out for Delivery" },
               { key: "delivered", label: `Delivered (${stats.delivered})` },
             ] as const
           ).map(({ key, label }) => (
@@ -211,7 +211,7 @@ export function WholesalerOrders() {
                       className={`px-2.5 py-1 rounded-full text-[12px] font-medium flex items-center gap-1 ${getStatusColor(order.status)}`}
                     >
                       {getStatusIcon(order.status)}
-                      {order.status}
+                      {order.status === "Shipped" ? "Out for Delivery" : order.status}
                     </span>
                   </div>
                   <p className="text-[14px] text-gray-600 mb-0.5">

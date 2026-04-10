@@ -161,7 +161,7 @@ export function ShopkeeperOrders() {
               { key: "all", label: `All (${stats.total})` },
               { key: "pending", label: "Pending" },
               { key: "confirmed", label: "Confirmed" },
-              { key: "shipped", label: "Shipped" },
+              { key: "shipped", label: "Out for Delivery" },
               { key: "delivered", label: `Delivered (${stats.delivered})` },
             ] as const
           ).map(({ key, label }) => (
@@ -240,7 +240,7 @@ export function ShopkeeperOrders() {
                       )}`}
                     >
                       {getStatusIcon(order.status)}
-                      {order.status}
+                      {order.status === "Shipped" ? "Out for Delivery" : order.status}
                     </span>
                   </div>
                   <p className="text-[13px] text-gray-600">

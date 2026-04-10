@@ -210,7 +210,7 @@ export function ShopkeeperDashboard() {
                       : "bg-yellow-100 text-yellow-700"
                   }`}
                 >
-                  {lastOrder.status}
+                  {lastOrder.status === "Shipped" ? "Out for Delivery" : lastOrder.status}
                 </span>
               </div>
               <div className="flex justify-between items-center">

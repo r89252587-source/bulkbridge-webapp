@@ -35,7 +35,20 @@ export function OrderDetail() {
         const docRef = doc(db, "orders", orderId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          setOrder(docSnap.data());
+          const data = docSnap.data();
+          
+          // Self-heal: If an older order doesn't have an OTP, generate one
+          if (!data.deliveryOtp) {
+            const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+            try {
+              await updateDoc(docRef, { deliveryOtp: newOtp });
+              data.deliveryOtp = newOtp;
+            } catch (err) {
+              console.warn("Could not self-heal OTP", err);
+            }
+          }
+          
+          setOrder(data);
         }
       } catch (error) {
         console.error("Error fetching order:", error);
@@ -354,7 +367,7 @@ export function OrderDetail() {
                       disabled={updating}
                       className="flex-1 py-3 bg-[#E8453C] text-white rounded-xl hover:bg-[#d43d35] transition-colors disabled:opacity-50"
                     >
-                      {updating ? "Updating..." : "Mark as Shipped"}
+                      {updating ? "Updating..." : "Mark as Out for Delivery"}
                     </button>
                   </div>
                 )}
