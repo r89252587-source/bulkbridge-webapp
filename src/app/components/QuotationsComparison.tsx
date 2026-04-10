@@ -293,6 +293,31 @@ export function QuotationsComparison() {
               </div>
             </div>
 
+            <div className="bg-gray-50 rounded-xl p-4">
+              <h4 className="text-sm font-bold text-[#1A1A1A] mb-3">Item Breakdown</h4>
+              <div className="space-y-3">
+                {selectedQuote.items.map((item, idx) => {
+                  const name = item.productName || item.product;
+                  const qty = `${item.requestedQty || item.quantity} ${item.unit}`;
+                  const price = item.pricePerUnit 
+                    ? parseFloat(item.pricePerUnit) * parseFloat(item.requestedQty || item.quantity) 
+                    : item.price || 0;
+                  
+                  return (
+                    <div key={idx} className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm font-medium text-[#1A1A1A]">{name}</p>
+                        <p className="text-xs text-gray-500">
+                          {qty} {item.pricePerUnit ? `(₹${item.pricePerUnit}/${item.unit})` : ""}
+                        </p>
+                      </div>
+                      <p className="text-sm font-bold text-[#1A1A1A]">₹{price.toLocaleString("en-IN")}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {selectedQuote.notes && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
                 <p className="text-xs text-yellow-700 font-medium mb-1">Wholesaler Note</p>
