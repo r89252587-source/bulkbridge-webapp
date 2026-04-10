@@ -41,8 +41,7 @@ export function WholesalerDashboard() {
     // Fetch active bids from Firestore
     const bidsQ = query(
       collection(db, "bids"),
-      where("status", "==", "active"),
-      orderBy("createdAt", "desc")
+      where("status", "==", "active")
     );
 
     const unsubBids = onSnapshot(bidsQ, (snapshot) => {
@@ -50,7 +49,12 @@ export function WholesalerDashboard() {
       snapshot.forEach((doc) => {
         b.push({ id: doc.id, ...doc.data() } as Bid);
       });
+      // Sort in-memory to avoid composite index requirement
+      b.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setBids(b);
+      setLoadingBids(false);
+    }, (error) => {
+      console.error("Error fetching bids:", error);
       setLoadingBids(false);
     });
 
@@ -65,9 +69,7 @@ export function WholesalerDashboard() {
     // Fetch recent orders for this wholesaler
     const ordersQ = query(
       collection(db, "orders"),
-      where("wholesalerId", "==", user.id),
-      orderBy("createdAt", "desc"),
-      limit(5)
+      where("wholesalerId", "==", user.id)
     );
 
     const unsubOrders = onSnapshot(ordersQ, (snapshot) => {
@@ -77,14 +79,24 @@ export function WholesalerDashboard() {
       snapshot.forEach((doc) => {
         const data = doc.data() as Order;
         orders.push({ id: doc.id, ...data });
-        if (data.status === "Delivered") {
-          earnings += data.totalAmount || 0;
+      });
+      
+      // Sort in-memory and update states
+      orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      orders.forEach(order => {
+        if (order.status === "Delivered") {
+          earnings += order.totalAmount || 0;
           completed++;
         }
       });
-      setRecentOrders(orders);
+
+      setRecentOrders(orders.slice(0, 5));
       setMonthlyEarnings(earnings);
       setCompletedOrdersCount(completed);
+      setLoadingOrders(false);
+    }, (error) => {
+      console.error("Error fetching orders:", error);
       setLoadingOrders(false);
     });
 

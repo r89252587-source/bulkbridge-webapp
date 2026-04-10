@@ -32,8 +32,7 @@ export function WholesalerOrders() {
 
     const q = query(
       collection(db, "orders"),
-      where("wholesalerId", "==", user.id),
-      orderBy("createdAt", "desc")
+      where("wholesalerId", "==", user.id)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -41,6 +40,8 @@ export function WholesalerOrders() {
       snapshot.forEach((doc) => {
         orders.push({ id: doc.id, ...doc.data() } as Order);
       });
+      // Sort in-memory
+      orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setAllOrders(orders);
       setLoading(false);
     }, (error) => {

@@ -54,18 +54,20 @@ export function ShopkeeperDashboard() {
     // Fetch last order
     const ordersQ = query(
       collection(db, "orders"),
-      where("shopkeeperId", "==", user.id),
-      orderBy("createdAt", "desc"),
-      limit(1)
+      where("shopkeeperId", "==", user.id)
     );
 
     const unsubOrders = onSnapshot(ordersQ, (snapshot) => {
       if (!snapshot.empty) {
-        const doc = snapshot.docs[0];
-        setLastOrder({ id: doc.id, ...doc.data() });
+        const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+        // Sort in-memory
+        orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setLastOrder(orders[0]);
       } else {
         setLastOrder(null);
       }
+    }, (error) => {
+      console.error("Error fetching last order:", error);
     });
 
     return () => {
