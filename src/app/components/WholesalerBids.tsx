@@ -1,130 +1,82 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { ChevronLeft, Search, Clock, Package, TrendingUp, Home, User } from "lucide-react";
+import { ChevronLeft, Search, Clock, Package, TrendingUp, Home, User, Bell, Loader2 } from "lucide-react";
+import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore";
+import { db } from "../../lib/firebase";
 
 interface Bid {
   id: string;
-  shopName: string;
+  shopkeeperName: string;
+  shopkeeperBusinessName?: string;
   category: string;
-  itemCount: number;
-  estimatedValue: number;
-  timeLeft: string;
-  priority: "high" | "medium" | "low";
-  status: "new" | "quoted" | "expired";
-  postedDate: string;
+  items: any[];
+  total: number;
+  status: string;
+  createdAt: string;
+  deliveryDate?: string;
 }
 
 export function WholesalerBids() {
   const navigate = useNavigate();
+  const [allBids, setAllBids] = useState<Bid[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<"all" | "new" | "quoted" | "expired">("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "completed">("all");
 
-  const allBids: Bid[] = [
-    {
-      id: "1",
-      shopName: "Raj General Store",
-      category: "Groceries & Staples",
-      itemCount: 12,
-      estimatedValue: 24500,
-      timeLeft: "2h left",
-      priority: "high",
-      status: "new",
-      postedDate: "Today, 10:30 AM",
-    },
-    {
-      id: "2",
-      shopName: "Modern Mart",
-      category: "Beverages",
-      itemCount: 8,
-      estimatedValue: 15800,
-      timeLeft: "5h left",
-      priority: "medium",
-      status: "new",
-      postedDate: "Today, 9:15 AM",
-    },
-    {
-      id: "3",
-      shopName: "Quick Shop",
-      category: "Personal Care",
-      itemCount: 15,
-      estimatedValue: 32000,
-      timeLeft: "1h left",
-      priority: "high",
-      status: "new",
-      postedDate: "Today, 11:45 AM",
-    },
-    {
-      id: "4",
-      shopName: "City Grocers",
-      category: "Groceries & Staples",
-      itemCount: 20,
-      estimatedValue: 45000,
-      timeLeft: "8h left",
-      priority: "low",
-      status: "new",
-      postedDate: "Today, 8:00 AM",
-    },
-    {
-      id: "5",
-      shopName: "Super Mart",
-      category: "Household Items",
-      itemCount: 10,
-      estimatedValue: 18500,
-      timeLeft: "Quoted",
-      priority: "medium",
-      status: "quoted",
-      postedDate: "Yesterday, 4:30 PM",
-    },
-    {
-      id: "6",
-      shopName: "Fresh Store",
-      category: "Groceries & Staples",
-      itemCount: 25,
-      estimatedValue: 52000,
-      timeLeft: "Expired",
-      priority: "high",
-      status: "expired",
-      postedDate: "2 days ago",
-    },
-  ];
+  useEffect(() => {
+    // Fetch all active bids from Firestore — wholesalers see all open bids
+    const q = query(
+      collection(db, "bids"),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const bids: Bid[] = [];
+      snapshot.forEach((doc) => {
+        bids.push({ id: doc.id, ...doc.data() } as Bid);
+      });
+      setAllBids(bids);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching bids:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const filteredBids = allBids.filter((bid) => {
-    const matchesSearch = bid.shopName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         bid.category.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filterStatus === "all" || bid.status === filterStatus;
+    const shopDisplay = bid.shopkeeperBusinessName || bid.shopkeeperName;
+    const matchesSearch =
+      shopDisplay.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      bid.category.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter =
+      filterStatus === "all" || bid.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high":
-        return "bg-red-100 text-red-700";
-      case "medium":
-        return "bg-yellow-100 text-yellow-700";
-      case "low":
-        return "bg-green-100 text-green-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "new":
-        return "bg-blue-100 text-blue-700";
-      case "quoted":
-        return "bg-green-100 text-green-700";
-      case "expired":
-        return "bg-gray-100 text-gray-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
-  };
-
   const stats = {
-    new: allBids.filter(b => b.status === "new").length,
-    quoted: allBids.filter(b => b.status === "quoted").length,
-    totalValue: allBids.filter(b => b.status === "new").reduce((sum, b) => sum + b.estimatedValue, 0),
+    active: allBids.filter((b) => b.status === "active").length,
+    completed: allBids.filter((b) => b.status === "completed").length,
+    totalValue: allBids
+      .filter((b) => b.status === "active")
+      .reduce((sum, b) => sum + (b.total || 0), 0),
+  };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return "—";
+    try {
+      const d = new Date(dateStr);
+      const diffMs = Date.now() - d.getTime();
+      const diffH = Math.floor(diffMs / 3600000);
+      if (diffH < 1) return "Just now";
+      if (diffH < 24) return `${diffH}h ago`;
+      const diffD = Math.floor(diffH / 24);
+      if (diffD === 1) return "Yesterday";
+      return `${diffD} days ago`;
+    } catch {
+      return dateStr;
+    }
   };
 
   return (
@@ -152,46 +104,25 @@ export function WholesalerBids() {
 
         {/* Filter Chips */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2">
-          <button
-            onClick={() => setFilterStatus("all")}
-            className={`px-4 py-2 rounded-full text-[14px] font-medium whitespace-nowrap transition-colors ${
-              filterStatus === "all"
-                ? "bg-[#E8453C] text-white"
-                : "bg-white text-gray-700 border border-gray-300"
-            }`}
-          >
-            All ({allBids.length})
-          </button>
-          <button
-            onClick={() => setFilterStatus("new")}
-            className={`px-4 py-2 rounded-full text-[14px] font-medium whitespace-nowrap transition-colors ${
-              filterStatus === "new"
-                ? "bg-[#E8453C] text-white"
-                : "bg-white text-gray-700 border border-gray-300"
-            }`}
-          >
-            New ({stats.new})
-          </button>
-          <button
-            onClick={() => setFilterStatus("quoted")}
-            className={`px-4 py-2 rounded-full text-[14px] font-medium whitespace-nowrap transition-colors ${
-              filterStatus === "quoted"
-                ? "bg-[#E8453C] text-white"
-                : "bg-white text-gray-700 border border-gray-300"
-            }`}
-          >
-            Quoted ({stats.quoted})
-          </button>
-          <button
-            onClick={() => setFilterStatus("expired")}
-            className={`px-4 py-2 rounded-full text-[14px] font-medium whitespace-nowrap transition-colors ${
-              filterStatus === "expired"
-                ? "bg-[#E8453C] text-white"
-                : "bg-white text-gray-700 border border-gray-300"
-            }`}
-          >
-            Expired
-          </button>
+          {(
+            [
+              { key: "all", label: `All (${allBids.length})` },
+              { key: "active", label: `Active (${stats.active})` },
+              { key: "completed", label: `Completed (${stats.completed})` },
+            ] as const
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setFilterStatus(key)}
+              className={`px-4 py-2 rounded-full text-[14px] font-medium whitespace-nowrap transition-colors ${
+                filterStatus === key
+                  ? "bg-[#E8453C] text-white"
+                  : "bg-white text-gray-700 border border-gray-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -202,42 +133,56 @@ export function WholesalerBids() {
             <Clock className="w-5 h-5 text-[#E8453C]" />
             <p className="text-[14px] text-gray-600">Active Bids</p>
           </div>
-          <p className="font-bold text-[#1A1A1A] text-[24px]">{stats.new}</p>
+          <p className="font-bold text-[#1A1A1A] text-[24px]">{stats.active}</p>
         </div>
         <div className="bg-white rounded-[12px] p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <TrendingUp className="w-5 h-5 text-[#E8453C]" />
             <p className="text-[14px] text-gray-600">Potential Value</p>
           </div>
-          <p className="font-bold text-[#1A1A1A] text-[20px]">₹{(stats.totalValue / 1000).toFixed(0)}k</p>
+          <p className="font-bold text-[#1A1A1A] text-[20px]">
+            ₹{(stats.totalValue / 1000).toFixed(0)}k
+          </p>
         </div>
       </div>
 
       {/* Bids List */}
       <div className="px-6 space-y-3 pb-6">
-        {filteredBids.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-[#6B6B6B]">
+            <Loader2 className="animate-spin mb-3" size={36} />
+            <p className="font-medium">Loading bids...</p>
+          </div>
+        ) : filteredBids.length === 0 ? (
           <div className="bg-white rounded-[12px] p-8 text-center">
             <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
             <p className="text-gray-600">No bids found</p>
+            <p className="text-sm text-gray-400 mt-1">
+              New bid requests from shopkeepers will appear here
+            </p>
           </div>
         ) : (
           filteredBids.map((bid) => (
-            <div
-              key={bid.id}
-              className="bg-white rounded-[12px] p-5 shadow-sm"
-            >
+            <div key={bid.id} className="bg-white rounded-[12px] p-5 shadow-sm">
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="font-bold text-[#1A1A1A] mb-1">{bid.shopName}</h3>
-                  <p className="text-[14px] text-gray-600 mb-2">{bid.postedDate}</p>
+                  <h3 className="font-bold text-[#1A1A1A] mb-1">
+                    {bid.shopkeeperBusinessName || bid.shopkeeperName}
+                  </h3>
+                  <p className="text-[14px] text-gray-600 mb-2">
+                    {formatDate(bid.createdAt)}
+                  </p>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="bg-[#F5F5F5] text-[#6B6B6B] px-3 py-1 rounded-full text-[12px]">
                       {bid.category}
                     </span>
-                    <span className={`px-3 py-1 rounded-full text-[12px] font-medium ${getPriorityColor(bid.priority)}`}>
-                      {bid.priority.toUpperCase()}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full text-[12px] font-medium ${getStatusColor(bid.status)}`}>
+                    <span
+                      className={`px-3 py-1 rounded-full text-[12px] font-medium ${
+                        bid.status === "active"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-gray-100 text-gray-700"
+                      }`}
+                    >
                       {bid.status.toUpperCase()}
                     </span>
                   </div>
@@ -245,7 +190,7 @@ export function WholesalerBids() {
                 <div className="text-right">
                   <p className="text-[14px] text-gray-600">Est. Value</p>
                   <p className="font-bold text-[#1A1A1A] text-[20px]">
-                    ₹{bid.estimatedValue.toLocaleString("en-IN")}
+                    ₹{(bid.total || 0).toLocaleString("en-IN")}
                   </p>
                 </div>
               </div>
@@ -254,29 +199,25 @@ export function WholesalerBids() {
                 <div className="flex items-center gap-4">
                   <div>
                     <p className="text-[12px] text-gray-600">Items</p>
-                    <p className="text-[#1A1A1A] font-medium">{bid.itemCount}</p>
+                    <p className="text-[#1A1A1A] font-medium">{bid.items?.length || 0}</p>
                   </div>
-                  <div>
-                    <p className="text-[12px] text-gray-600">Time Left</p>
-                    <p className={`font-medium ${bid.status === "new" ? "text-[#E8453C]" : "text-gray-600"}`}>
-                      {bid.timeLeft}
-                    </p>
-                  </div>
+                  {bid.deliveryDate && (
+                    <div>
+                      <p className="text-[12px] text-gray-600">Delivery By</p>
+                      <p className="text-[#E8453C] font-medium">{bid.deliveryDate}</p>
+                    </div>
+                  )}
                 </div>
-                {bid.status === "new" ? (
+                {bid.status === "active" ? (
                   <button
                     onClick={() => navigate(`/wholesaler/send-quotation/${bid.id}`)}
                     className="bg-[#E8453C] text-white px-6 py-2 rounded-[12px] font-medium hover:bg-[#d63d33] transition-colors"
                   >
                     Submit Quote
                   </button>
-                ) : bid.status === "quoted" ? (
-                  <button className="bg-gray-200 text-gray-600 px-6 py-2 rounded-[12px] font-medium cursor-not-allowed">
-                    Quoted
-                  </button>
                 ) : (
                   <button className="bg-gray-200 text-gray-600 px-6 py-2 rounded-[12px] font-medium cursor-not-allowed">
-                    Expired
+                    Completed
                   </button>
                 )}
               </div>
@@ -296,7 +237,7 @@ export function WholesalerBids() {
             <span className="text-[12px]">Home</span>
           </button>
           <button className="flex flex-col items-center gap-1 text-[#E8453C]">
-            <Clock className="w-6 h-6" />
+            <Bell className="w-6 h-6" />
             <span className="text-[12px]">Bids</span>
           </button>
           <button

@@ -95,6 +95,17 @@ export function QuotationsComparison() {
       // 3. Mark the Quotation as accepted
       await updateDoc(doc(db, "quotations", selectedQuote.id), { status: "accepted" });
 
+      // 4. Notify the wholesaler
+      await addDoc(collection(db, "notifications"), {
+        userId: selectedQuote.wholesalerId,
+        type: "order",
+        title: "Order Confirmed!",
+        message: `${user.businessName || user.name} confirmed your quotation of ₹${selectedQuote.total.toLocaleString("en-IN")}. Check your orders.`,
+        createdAt: new Date().toISOString(),
+        read: false,
+        actionRoute: `/order/${orderDoc.id}`,
+      });
+
       navigate(`/order/${orderDoc.id}`);
     } catch (error) {
       console.error("Error confirming order:", error);

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { Bell, TrendingUp, Package, CheckCircle, Clock, Truck, User, Home, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore";
+import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
 interface Bid {
@@ -19,78 +19,79 @@ interface Bid {
 
 interface Order {
   id: string;
-  orderNumber: string;
-  shopName: string;
-  amount: number;
+  orderNumber?: string;
+  shopkeeperId: string;
+  totalAmount: number;
   status: "Pending" | "Confirmed" | "Delivered";
-  date: string;
+  createdAt: string;
+  items: any[];
 }
 
 export function WholesalerDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [bids, setBids] = useState<Bid[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [loadingBids, setLoadingBids] = useState(true);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [monthlyEarnings, setMonthlyEarnings] = useState(0);
+  const [completedOrdersCount, setCompletedOrdersCount] = useState(0);
 
   useEffect(() => {
     // Fetch active bids from Firestore
-    const q = query(
+    const bidsQ = query(
       collection(db, "bids"),
       where("status", "==", "active"),
       orderBy("createdAt", "desc")
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubBids = onSnapshot(bidsQ, (snapshot) => {
       const b: Bid[] = [];
       snapshot.forEach((doc) => {
         b.push({ id: doc.id, ...doc.data() } as Bid);
       });
       setBids(b);
-      setLoading(false);
+      setLoadingBids(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubBids();
+    };
   }, []);
 
-  const orders: Order[] = [
-    {
-      id: "1",
-      orderNumber: "ORD-2024-045",
-      shopName: "Raj General Store",
-      amount: 23450,
-      status: "Confirmed",
-      date: "Today",
-    },
-    {
-      id: "2",
-      orderNumber: "ORD-2024-044",
-      shopName: "City Supermarket",
-      amount: 18900,
-      status: "Delivered",
-      date: "Yesterday",
-    },
-    {
-      id: "3",
-      orderNumber: "ORD-2024-043",
-      shopName: "Quick Shop",
-      amount: 31200,
-      status: "Pending",
-      date: "2 days ago",
-    },
-  ];
+  useEffect(() => {
+    if (!user) return;
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high":
-        return "bg-[#E8453C] text-white";
-      case "medium":
-        return "bg-orange-100 text-orange-700";
-      case "low":
-        return "bg-gray-100 text-gray-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
-  };
+    // Fetch recent orders for this wholesaler
+    const ordersQ = query(
+      collection(db, "orders"),
+      where("wholesalerId", "==", user.id),
+      orderBy("createdAt", "desc"),
+      limit(5)
+    );
+
+    const unsubOrders = onSnapshot(ordersQ, (snapshot) => {
+      const orders: Order[] = [];
+      let earnings = 0;
+      let completed = 0;
+      snapshot.forEach((doc) => {
+        const data = doc.data() as Order;
+        orders.push({ id: doc.id, ...data });
+        if (data.status === "Delivered") {
+          earnings += data.totalAmount || 0;
+          completed++;
+        }
+      });
+      setRecentOrders(orders);
+      setMonthlyEarnings(earnings);
+      setCompletedOrdersCount(completed);
+      setLoadingOrders(false);
+    });
+
+    return () => {
+      unsubOrders();
+    };
+  }, [user]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -118,6 +119,21 @@ export function WholesalerDashboard() {
     }
   };
 
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return "—";
+    try {
+      const d = new Date(dateStr);
+      const diffMs = Date.now() - d.getTime();
+      const diffH = Math.floor(diffMs / 3600000);
+      if (diffH < 24) return "Today";
+      const diffD = Math.floor(diffH / 24);
+      if (diffD === 1) return "Yesterday";
+      return `${diffD} days ago`;
+    } catch {
+      return dateStr;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F5F5F5] pb-20">
       {/* Header */}
@@ -126,9 +142,11 @@ export function WholesalerDashboard() {
           <h1 className="text-[#1A1A1A]">{user?.name || "Wholesaler"}</h1>
           <button className="relative text-[#1A1A1A]" onClick={() => navigate("/notifications")}>
             <Bell size={24} />
-            <span className="absolute -top-1 -right-1 bg-[#E8453C] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-              7
-            </span>
+            {bids.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-[#E8453C] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                {bids.length > 9 ? "9+" : bids.length}
+              </span>
+            )}
           </button>
         </div>
         <h2 className="text-[#1A1A1A] text-[18px]">Wholesaler Dashboard</h2>
@@ -140,17 +158,23 @@ export function WholesalerDashboard() {
         <div className="bg-gradient-to-br from-[#E8453C] to-[#d43d35] rounded-xl p-6 text-white shadow-lg">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp size={20} />
-            <p className="text-white/90 text-sm">This Month's Earnings</p>
+            <p className="text-white/90 text-sm">Total Earnings (Delivered)</p>
           </div>
-          <p className="text-4xl mb-4">₹2,45,800</p>
+          <p className="text-4xl mb-4">
+            {loadingOrders ? (
+              <Loader2 className="animate-spin inline" size={32} />
+            ) : (
+              `₹${monthlyEarnings.toLocaleString("en-IN")}`
+            )}
+          </p>
           <div className="flex items-center justify-between pt-3 border-t border-white/20">
             <div>
               <p className="text-white/80 text-sm">Orders Completed</p>
-              <p className="text-xl mt-1">38</p>
+              <p className="text-xl mt-1">{completedOrdersCount}</p>
             </div>
             <div className="text-right">
-              <p className="text-white/80 text-sm">Avg. Order Value</p>
-              <p className="text-xl mt-1">₹6,468</p>
+              <p className="text-white/80 text-sm">Active Bids Available</p>
+              <p className="text-xl mt-1">{bids.length}</p>
             </div>
           </div>
         </div>
@@ -168,7 +192,7 @@ export function WholesalerDashboard() {
           </div>
 
           <div className="space-y-3">
-            {loading ? (
+            {loadingBids ? (
               <div className="flex flex-col items-center justify-center py-10 text-[#6B6B6B]">
                 <Loader2 className="animate-spin mb-2" size={32} />
                 <p>Loading bids...</p>
@@ -178,7 +202,7 @@ export function WholesalerDashboard() {
                 <p className="text-[#6B6B6B]">No active bids at the moment</p>
               </div>
             ) : (
-              bids.map((bid) => (
+              bids.slice(0, 3).map((bid) => (
                 <div
                   key={bid.id}
                   className="bg-white rounded-xl p-5 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
@@ -193,14 +217,14 @@ export function WholesalerDashboard() {
                           {bid.category}
                         </span>
                         <span className={`px-3 py-1 rounded-full text-xs bg-orange-100 text-orange-700`}>
-                          MEDIUM
+                          NEW
                         </span>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-[#6B6B6B]">Est. Value</p>
                       <p className="text-xl text-[#1A1A1A]">
-                        ₹{bid.total.toLocaleString("en-IN")}
+                        ₹{(bid.total || 0).toLocaleString("en-IN")}
                       </p>
                     </div>
                   </div>
@@ -209,7 +233,7 @@ export function WholesalerDashboard() {
                     <div className="flex items-center gap-4">
                       <div>
                         <p className="text-xs text-[#6B6B6B]">Items</p>
-                        <p className="text-[#1A1A1A]">{bid.items.length}</p>
+                        <p className="text-[#1A1A1A]">{bid.items?.length || 0}</p>
                       </div>
                       <div>
                         <p className="text-xs text-[#6B6B6B]">Delivery</p>
@@ -232,7 +256,7 @@ export function WholesalerDashboard() {
         {/* Active Orders Section */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[#1A1A1A]">Active Orders</h2>
+            <h2 className="text-[#1A1A1A]">My Recent Orders</h2>
             <button
               onClick={() => navigate("/wholesaler/orders")}
               className="text-[#E8453C] text-sm font-medium"
@@ -242,36 +266,53 @@ export function WholesalerDashboard() {
           </div>
 
           <div className="space-y-3">
-            {orders.map((order) => (
-              <div
-                key={order.id}
-                className="bg-white rounded-xl p-5 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => navigate(`/order/${order.orderNumber}`)}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Package className="text-[#6B6B6B]" size={18} />
-                      <h3 className="text-[#1A1A1A]">{order.orderNumber}</h3>
-                    </div>
-                    <p className="text-[#6B6B6B] text-sm">{order.shopName}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl text-[#1A1A1A]">
-                      ₹{order.amount.toLocaleString("en-IN")}
-                    </p>
-                    <p className="text-xs text-[#6B6B6B] mt-1">{order.date}</p>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-gray-100">
-                  <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm ${getStatusColor(order.status)}`}>
-                    {getStatusIcon(order.status)}
-                    {order.status}
-                  </span>
-                </div>
+            {loadingOrders ? (
+              <div className="flex flex-col items-center justify-center py-10 text-[#6B6B6B]">
+                <Loader2 className="animate-spin mb-2" size={32} />
+                <p>Loading orders...</p>
               </div>
-            ))}
+            ) : recentOrders.length === 0 ? (
+              <div className="bg-white rounded-xl p-8 text-center shadow-sm">
+                <Package className="mx-auto mb-3 text-gray-300" size={40} />
+                <p className="text-[#6B6B6B]">No orders yet</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Orders appear here when shopkeepers confirm your quotations
+                </p>
+              </div>
+            ) : (
+              recentOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="bg-white rounded-xl p-5 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => navigate(`/order/${order.id}`)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Package className="text-[#6B6B6B]" size={18} />
+                        <h3 className="text-[#1A1A1A]">
+                          #{order.orderNumber || order.id.slice(-6).toUpperCase()}
+                        </h3>
+                      </div>
+                      <p className="text-[#6B6B6B] text-sm">{order.items?.length || 0} items</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl text-[#1A1A1A]">
+                        ₹{(order.totalAmount || 0).toLocaleString("en-IN")}
+                      </p>
+                      <p className="text-xs text-[#6B6B6B] mt-1">{formatDate(order.createdAt)}</p>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-gray-100">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm ${getStatusColor(order.status)}`}>
+                      {getStatusIcon(order.status)}
+                      {order.status}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

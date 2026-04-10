@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
   ArrowLeft,
@@ -12,74 +12,63 @@ import {
   FileText,
   ShoppingCart,
   User,
+  Loader2,
 } from "lucide-react";
+import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore";
+import { db } from "../../lib/firebase";
+import { useAuth } from "../context/AuthContext";
 
 interface Order {
   id: string;
-  orderNumber: string;
+  orderNumber?: string;
   wholesalerName: string;
-  amount: number;
+  wholesalerBusinessName?: string;
+  totalAmount: number;
   status: "Pending" | "Confirmed" | "Shipped" | "Delivered" | "Cancelled";
-  date: string;
-  itemCount: number;
-  category: string;
+  createdAt: string;
+  items: any[];
+  bidId?: string;
 }
 
 export function ShopkeeperOrders() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<
     "all" | "pending" | "confirmed" | "shipped" | "delivered"
   >("all");
 
-  const allOrders: Order[] = [
-    {
-      id: "ORD-2024-001",
-      orderNumber: "ORD-2024-001",
-      wholesalerName: "Shree Traders",
-      amount: 24850,
-      status: "Delivered",
-      date: "Apr 5, 2026",
-      itemCount: 12,
-      category: "Groceries & Staples",
-    },
-    {
-      id: "ORD-2024-002",
-      orderNumber: "ORD-2024-002",
-      wholesalerName: "Gupta Wholesale",
-      amount: 18600,
-      status: "Shipped",
-      date: "Apr 6, 2026",
-      itemCount: 8,
-      category: "Beverages",
-    },
-    {
-      id: "ORD-2024-003",
-      orderNumber: "ORD-2024-003",
-      wholesalerName: "Modern Wholesale Hub",
-      amount: 31200,
-      status: "Confirmed",
-      date: "Apr 7, 2026",
-      itemCount: 15,
-      category: "Personal Care",
-    },
-    {
-      id: "ORD-2024-004",
-      orderNumber: "ORD-2024-004",
-      wholesalerName: "Shree Traders",
-      amount: 9500,
-      status: "Pending",
-      date: "Apr 7, 2026",
-      itemCount: 5,
-      category: "Household Items",
-    },
-  ];
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, "orders"),
+      where("shopkeeperId", "==", user.id),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const orders: Order[] = [];
+      snapshot.forEach((doc) => {
+        orders.push({ id: doc.id, ...doc.data() } as Order);
+      });
+      setAllOrders(orders);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching orders:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const filteredOrders = allOrders.filter((order) => {
+    const wholesalerDisplay = order.wholesalerBusinessName || order.wholesalerName;
     const matchesSearch =
-      order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.wholesalerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.category.toLowerCase().includes(searchQuery.toLowerCase());
+      (order.orderNumber || order.id).toLowerCase().includes(searchQuery.toLowerCase()) ||
+      wholesalerDisplay.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter =
       filterStatus === "all" || order.status.toLowerCase() === filterStatus;
     return matchesSearch && matchesFilter;
@@ -93,7 +82,7 @@ export function ShopkeeperOrders() {
     delivered: allOrders.filter((o) => o.status === "Delivered").length,
     totalSpent: allOrders
       .filter((o) => o.status === "Delivered")
-      .reduce((s, o) => s + o.amount, 0),
+      .reduce((s, o) => s + (o.totalAmount || 0), 0),
   };
 
   const getStatusColor = (status: string) => {
@@ -125,6 +114,19 @@ export function ShopkeeperOrders() {
         return <Clock className="w-4 h-4" />;
       default:
         return null;
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return "—";
+    try {
+      return new Date(dateStr).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return dateStr;
     }
   };
 
@@ -197,7 +199,12 @@ export function ShopkeeperOrders() {
 
       {/* Orders List */}
       <div className="px-4 space-y-3 pb-4">
-        {filteredOrders.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-[#6B6B6B]">
+            <Loader2 className="animate-spin mb-3" size={36} />
+            <p className="font-medium">Loading your orders...</p>
+          </div>
+        ) : filteredOrders.length === 0 ? (
           <div className="bg-white rounded-[12px] p-10 text-center shadow-sm">
             <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500 font-medium">No orders found</p>
@@ -223,7 +230,9 @@ export function ShopkeeperOrders() {
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-bold text-[#1A1A1A]">{order.orderNumber}</h3>
+                    <h3 className="font-bold text-[#1A1A1A]">
+                      {order.orderNumber || `#${order.id.slice(-6).toUpperCase()}`}
+                    </h3>
                     <span
                       className={`px-2.5 py-1 rounded-full text-[11px] font-medium flex items-center gap-1 ${getStatusColor(
                         order.status
@@ -233,20 +242,26 @@ export function ShopkeeperOrders() {
                       {order.status}
                     </span>
                   </div>
-                  <p className="text-[13px] text-gray-600">{order.wholesalerName}</p>
-                  <p className="text-[12px] text-gray-400 mt-0.5">{order.category}</p>
+                  <p className="text-[13px] text-gray-600">
+                    {order.wholesalerBusinessName || order.wholesalerName}
+                  </p>
+                  <p className="text-[12px] text-gray-400 mt-0.5">
+                    {order.items?.length || 0} items
+                  </p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-[#1A1A1A] text-[18px]">
-                    ₹{order.amount.toLocaleString("en-IN")}
+                    ₹{(order.totalAmount || 0).toLocaleString("en-IN")}
                   </p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">{order.date}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    {formatDate(order.createdAt)}
+                  </p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                 <span className="text-[12px] text-gray-500">
-                  {order.itemCount} items
+                  {order.items?.length || 0} items
                 </span>
                 <span className="text-[#E8453C] text-[13px] font-medium">
                   View Details →

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ChevronLeft, Package, CheckCircle, Loader2 } from "lucide-react";
-import { doc, getDoc, addDoc, collection } from "firebase/firestore";
+import { doc, getDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useAuth } from "../context/AuthContext";
 
@@ -85,6 +85,7 @@ export function SendQuotation() {
     
     setSubmitting(true);
     try {
+      const total = calculateTotal();
       const quotation = {
         bidId,
         shopkeeperId: bid.shopkeeperId,
@@ -94,12 +95,23 @@ export function SendQuotation() {
         items,
         deliveryDays,
         notes,
-        total: calculateTotal(),
+        total,
         sentAt: new Date().toISOString(),
         status: "pending",
       };
       
       await addDoc(collection(db, "quotations"), quotation);
+
+      // Notify the shopkeeper
+      await addDoc(collection(db, "notifications"), {
+        userId: bid.shopkeeperId,
+        type: "quote",
+        title: "New Quotation Received",
+        message: `${user.businessName || user.name} sent a quotation of ₹${total.toLocaleString("en-IN")} for your ${bid.category} bid.`,
+        createdAt: new Date().toISOString(),
+        read: false,
+        actionRoute: `/quotations/${bidId}`,
+      });
       setSubmitted(true);
     } catch (error) {
       console.error("Error sending quotation:", error);

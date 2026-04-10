@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
   ArrowLeft,
@@ -8,108 +8,90 @@ import {
   CheckCircle,
   AlertCircle,
   Clock,
-  Trash2,
+  Loader2,
 } from "lucide-react";
+import { collection, query, where, onSnapshot, orderBy, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { db } from "../../lib/firebase";
+import { useAuth } from "../context/AuthContext";
 
 interface Notification {
   id: string;
   type: "bid" | "order" | "quote" | "system";
   title: string;
   message: string;
-  time: string;
+  createdAt: string;
   read: boolean;
   actionRoute?: string;
+  userId: string;
 }
 
 export function Notifications() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: "1",
-      type: "quote",
-      title: "New Quotation Received",
-      message: "Shree Traders sent a quotation of ₹23,450 for your Weekly Grocery bid.",
-      time: "5 min ago",
-      read: false,
-      actionRoute: "/quotations/1",
-    },
-    {
-      id: "2",
-      type: "quote",
-      title: "New Quotation Received",
-      message: "Gupta Wholesale sent a quotation of ₹24,800 for your Weekly Grocery bid.",
-      time: "12 min ago",
-      read: false,
-      actionRoute: "/quotations/1",
-    },
-    {
-      id: "3",
-      type: "order",
-      title: "Order Out for Delivery",
-      message: "Your order ORD-2024-001 from Shree Traders is out for delivery.",
-      time: "2 hours ago",
-      read: false,
-      actionRoute: "/order/ORD-2024-001",
-    },
-    {
-      id: "4",
-      type: "bid",
-      title: "Bid Expiring Soon",
-      message: "Your bid for Personal Care items expires in 1 hour. Check quotations now.",
-      time: "3 hours ago",
-      read: true,
-      actionRoute: "/quotations/2",
-    },
-    {
-      id: "5",
-      type: "order",
-      title: "Order Confirmed",
-      message: "Your order ORD-2024-002 has been confirmed by Modern Wholesale Hub.",
-      time: "Yesterday",
-      read: true,
-      actionRoute: "/order/ORD-2024-002",
-    },
-    {
-      id: "6",
-      type: "system",
-      title: "Profile Incomplete",
-      message: "Add your GST number and business name to get verified status.",
-      time: "2 days ago",
-      read: true,
-      actionRoute: "/profile/shopkeeper",
-    },
-    {
-      id: "7",
-      type: "quote",
-      title: "Bid Received 3 Quotes",
-      message: "Your Beverages bid has received 3 quotations. Compare now to get the best price.",
-      time: "2 days ago",
-      read: true,
-      actionRoute: "/quotations/3",
-    },
-  ]);
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, "notifications"),
+      where("userId", "==", user.id),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const notifs: Notification[] = [];
+      snapshot.forEach((docSnap) => {
+        notifs.push({ id: docSnap.id, ...docSnap.data() } as Notification);
+      });
+      setNotifications(notifs);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching notifications:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  };
-
-  const markRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+  const markAllRead = async () => {
+    const unread = notifications.filter((n) => !n.read);
+    await Promise.all(
+      unread.map((n) => updateDoc(doc(db, "notifications", n.id), { read: true }))
     );
   };
 
-  const deleteNotification = (id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  const markRead = async (id: string) => {
+    await updateDoc(doc(db, "notifications", id), { read: true });
   };
 
-  const handleNotificationClick = (notif: Notification) => {
-    markRead(notif.id);
-    if (notif.actionRoute) {
-      navigate(notif.actionRoute);
+  const deleteNotification = async (id: string) => {
+    await deleteDoc(doc(db, "notifications", id));
+  };
+
+  const handleNotificationClick = async (notif: Notification) => {
+    if (!notif.read) await markRead(notif.id);
+    if (notif.actionRoute) navigate(notif.actionRoute);
+  };
+
+  const formatTime = (dateStr: string) => {
+    if (!dateStr) return "";
+    try {
+      const d = new Date(dateStr);
+      const diffMs = Date.now() - d.getTime();
+      const diffMin = Math.floor(diffMs / 60000);
+      if (diffMin < 1) return "Just now";
+      if (diffMin < 60) return `${diffMin} min ago`;
+      const diffHr = Math.floor(diffMin / 60);
+      if (diffHr < 24) return `${diffHr} hour${diffHr > 1 ? "s" : ""} ago`;
+      const diffDay = Math.floor(diffHr / 24);
+      if (diffDay === 1) return "Yesterday";
+      return `${diffDay} days ago`;
+    } catch {
+      return dateStr;
     }
   };
 
@@ -172,7 +154,12 @@ export function Notifications() {
 
       {/* Content */}
       <div className="px-4 py-4 space-y-2">
-        {notifications.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-[#6B6B6B]">
+            <Loader2 className="animate-spin mb-3" size={36} />
+            <p className="font-medium">Loading notifications...</p>
+          </div>
+        ) : notifications.length === 0 ? (
           <div className="bg-white rounded-[16px] p-12 text-center shadow-sm mt-4">
             <Bell className="w-14 h-14 text-gray-200 mx-auto mb-4" />
             <h3 className="font-bold text-[#1A1A1A] mb-1">All caught up!</h3>
@@ -198,6 +185,7 @@ export function Notifications() {
                       onDelete={deleteNotification}
                       getIcon={getIcon}
                       getIconBg={getIconBg}
+                      formatTime={formatTime}
                     />
                   ))}
               </div>
@@ -219,6 +207,7 @@ export function Notifications() {
                       onDelete={deleteNotification}
                       getIcon={getIcon}
                       getIconBg={getIconBg}
+                      formatTime={formatTime}
                     />
                   ))}
               </div>
@@ -236,12 +225,14 @@ function NotifCard({
   onDelete,
   getIcon,
   getIconBg,
+  formatTime,
 }: {
   notif: Notification;
   onTap: (n: Notification) => void;
   onDelete: (id: string) => void;
   getIcon: (type: string) => JSX.Element;
   getIconBg: (type: string) => string;
+  formatTime: (dateStr: string) => string;
 }) {
   return (
     <div
@@ -251,9 +242,7 @@ function NotifCard({
       onClick={() => onTap(notif)}
     >
       <div
-        className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${getIconBg(
-          notif.type
-        )}`}
+        className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${getIconBg(notif.type)}`}
       >
         {getIcon(notif.type)}
       </div>
@@ -274,7 +263,7 @@ function NotifCard({
         <p className="text-[13px] text-gray-500 mt-0.5 leading-snug">{notif.message}</p>
         <div className="flex items-center gap-2 mt-2">
           <Clock className="w-3 h-3 text-gray-400" />
-          <span className="text-[11px] text-gray-400">{notif.time}</span>
+          <span className="text-[11px] text-gray-400">{formatTime(notif.createdAt)}</span>
         </div>
       </div>
 
@@ -285,7 +274,7 @@ function NotifCard({
         }}
         className="text-gray-300 hover:text-[#E8453C] transition-colors flex-shrink-0 mt-0.5"
       >
-        <Trash2 className="w-4 h-4" />
+        ✕
       </button>
     </div>
   );

@@ -1,96 +1,59 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { ChevronLeft, Search, Package, CheckCircle, Clock, Truck, Eye, Home, User, Bell } from "lucide-react";
+import { ChevronLeft, Search, Package, CheckCircle, Clock, Truck, Eye, Home, User, Bell, Loader2 } from "lucide-react";
+import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore";
+import { db } from "../../lib/firebase";
+import { useAuth } from "../context/AuthContext";
 
 interface Order {
   id: string;
-  orderNumber: string;
-  shopName: string;
-  shopAddress: string;
-  amount: number;
+  orderNumber?: string;
+  shopkeeperId: string;
+  wholesalerId: string;
+  wholesalerName: string;
+  wholesalerBusinessName?: string;
+  totalAmount: number;
   status: "Pending" | "Confirmed" | "Packed" | "Shipped" | "Delivered";
-  date: string;
-  itemCount: number;
-  paymentStatus: "Advance Paid" | "Fully Paid" | "Pending";
+  createdAt: string;
+  items: any[];
+  deliveryDays?: string;
 }
 
 export function WholesalerOrders() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "confirmed" | "shipped" | "delivered">("all");
 
-  const allOrders: Order[] = [
-    {
-      id: "1",
-      orderNumber: "ORD-2024-1234",
-      shopName: "Raj General Store",
-      shopAddress: "MG Road, Bangalore",
-      amount: 24850,
-      status: "Confirmed",
-      date: "Apr 5, 2026",
-      itemCount: 12,
-      paymentStatus: "Advance Paid",
-    },
-    {
-      id: "2",
-      orderNumber: "ORD-2024-1235",
-      shopName: "Modern Mart",
-      shopAddress: "HSR Layout, Bangalore",
-      amount: 15600,
-      status: "Shipped",
-      date: "Apr 4, 2026",
-      itemCount: 8,
-      paymentStatus: "Advance Paid",
-    },
-    {
-      id: "3",
-      orderNumber: "ORD-2024-1236",
-      shopName: "Quick Shop",
-      shopAddress: "Indiranagar, Bangalore",
-      amount: 31200,
-      status: "Pending",
-      date: "Apr 5, 2026",
-      itemCount: 15,
-      paymentStatus: "Pending",
-    },
-    {
-      id: "4",
-      orderNumber: "ORD-2024-1237",
-      shopName: "City Grocers",
-      shopAddress: "Koramangala, Bangalore",
-      amount: 42800,
-      status: "Delivered",
-      date: "Apr 3, 2026",
-      itemCount: 20,
-      paymentStatus: "Fully Paid",
-    },
-    {
-      id: "5",
-      orderNumber: "ORD-2024-1238",
-      shopName: "Super Mart",
-      shopAddress: "Whitefield, Bangalore",
-      amount: 18900,
-      status: "Packed",
-      date: "Apr 5, 2026",
-      itemCount: 10,
-      paymentStatus: "Advance Paid",
-    },
-    {
-      id: "6",
-      orderNumber: "ORD-2024-1239",
-      shopName: "Fresh Store",
-      shopAddress: "JP Nagar, Bangalore",
-      amount: 52400,
-      status: "Confirmed",
-      date: "Apr 4, 2026",
-      itemCount: 25,
-      paymentStatus: "Advance Paid",
-    },
-  ];
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, "orders"),
+      where("wholesalerId", "==", user.id),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const orders: Order[] = [];
+      snapshot.forEach((doc) => {
+        orders.push({ id: doc.id, ...doc.data() } as Order);
+      });
+      setAllOrders(orders);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching orders:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const filteredOrders = allOrders.filter((order) => {
-    const matchesSearch = order.shopName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch =
+      (order.orderNumber || order.id).toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = filterStatus === "all" || order.status.toLowerCase() === filterStatus;
     return matchesSearch && matchesFilter;
   });
@@ -129,25 +92,27 @@ export function WholesalerOrders() {
     }
   };
 
-  const getPaymentColor = (status: string) => {
-    switch (status) {
-      case "Fully Paid":
-        return "text-green-600";
-      case "Advance Paid":
-        return "text-blue-600";
-      case "Pending":
-        return "text-orange-600";
-      default:
-        return "text-gray-600";
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return "—";
+    try {
+      return new Date(dateStr).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return dateStr;
     }
   };
 
   const stats = {
     total: allOrders.length,
-    pending: allOrders.filter(o => o.status === "Pending").length,
-    active: allOrders.filter(o => ["Confirmed", "Packed", "Shipped"].includes(o.status)).length,
-    delivered: allOrders.filter(o => o.status === "Delivered").length,
-    totalRevenue: allOrders.filter(o => o.status === "Delivered").reduce((sum, o) => sum + o.amount, 0),
+    pending: allOrders.filter((o) => o.status === "Pending").length,
+    active: allOrders.filter((o) => ["Confirmed", "Packed", "Shipped"].includes(o.status)).length,
+    delivered: allOrders.filter((o) => o.status === "Delivered").length,
+    totalRevenue: allOrders
+      .filter((o) => o.status === "Delivered")
+      .reduce((sum, o) => sum + (o.totalAmount || 0), 0),
   };
 
   return (
@@ -168,63 +133,34 @@ export function WholesalerOrders() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by shop name or order ID..."
+            placeholder="Search by order ID..."
             className="w-full pl-12 pr-4 py-3 bg-[#F5F5F5] border border-gray-300 rounded-[12px] text-[16px] focus:outline-none focus:border-[#E8453C]"
           />
         </div>
 
         {/* Filter Chips */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2">
-          <button
-            onClick={() => setFilterStatus("all")}
-            className={`px-4 py-2 rounded-full text-[14px] font-medium whitespace-nowrap transition-colors ${
-              filterStatus === "all"
-                ? "bg-[#E8453C] text-white"
-                : "bg-white text-gray-700 border border-gray-300"
-            }`}
-          >
-            All ({stats.total})
-          </button>
-          <button
-            onClick={() => setFilterStatus("pending")}
-            className={`px-4 py-2 rounded-full text-[14px] font-medium whitespace-nowrap transition-colors ${
-              filterStatus === "pending"
-                ? "bg-[#E8453C] text-white"
-                : "bg-white text-gray-700 border border-gray-300"
-            }`}
-          >
-            Pending ({stats.pending})
-          </button>
-          <button
-            onClick={() => setFilterStatus("confirmed")}
-            className={`px-4 py-2 rounded-full text-[14px] font-medium whitespace-nowrap transition-colors ${
-              filterStatus === "confirmed"
-                ? "bg-[#E8453C] text-white"
-                : "bg-white text-gray-700 border border-gray-300"
-            }`}
-          >
-            Confirmed
-          </button>
-          <button
-            onClick={() => setFilterStatus("shipped")}
-            className={`px-4 py-2 rounded-full text-[14px] font-medium whitespace-nowrap transition-colors ${
-              filterStatus === "shipped"
-                ? "bg-[#E8453C] text-white"
-                : "bg-white text-gray-700 border border-gray-300"
-            }`}
-          >
-            Shipped
-          </button>
-          <button
-            onClick={() => setFilterStatus("delivered")}
-            className={`px-4 py-2 rounded-full text-[14px] font-medium whitespace-nowrap transition-colors ${
-              filterStatus === "delivered"
-                ? "bg-[#E8453C] text-white"
-                : "bg-white text-gray-700 border border-gray-300"
-            }`}
-          >
-            Delivered ({stats.delivered})
-          </button>
+          {(
+            [
+              { key: "all", label: `All (${stats.total})` },
+              { key: "pending", label: `Pending (${stats.pending})` },
+              { key: "confirmed", label: "Confirmed" },
+              { key: "shipped", label: "Shipped" },
+              { key: "delivered", label: `Delivered (${stats.delivered})` },
+            ] as const
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setFilterStatus(key)}
+              className={`px-4 py-2 rounded-full text-[14px] font-medium whitespace-nowrap transition-colors ${
+                filterStatus === key
+                  ? "bg-[#E8453C] text-white"
+                  : "bg-white text-gray-700 border border-gray-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -240,42 +176,57 @@ export function WholesalerOrders() {
         </div>
         <div className="bg-white rounded-[12px] p-4 shadow-sm">
           <p className="text-[12px] text-gray-600 mb-1">Revenue</p>
-          <p className="font-bold text-[#1A1A1A] text-[16px]">₹{(stats.totalRevenue / 1000).toFixed(0)}k</p>
+          <p className="font-bold text-[#1A1A1A] text-[16px]">
+            ₹{(stats.totalRevenue / 1000).toFixed(0)}k
+          </p>
         </div>
       </div>
 
       {/* Orders List */}
       <div className="px-6 space-y-3 pb-6">
-        {filteredOrders.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-[#6B6B6B]">
+            <Loader2 className="animate-spin mb-3" size={36} />
+            <p className="font-medium">Loading your orders...</p>
+          </div>
+        ) : filteredOrders.length === 0 ? (
           <div className="bg-white rounded-[12px] p-8 text-center">
             <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
             <p className="text-gray-600">No orders found</p>
+            <p className="text-sm text-gray-400 mt-1">
+              Orders will appear here when shopkeepers confirm your quotations
+            </p>
           </div>
         ) : (
           filteredOrders.map((order) => (
-            <div
-              key={order.id}
-              className="bg-white rounded-[12px] p-5 shadow-sm"
-            >
+            <div key={order.id} className="bg-white rounded-[12px] p-5 shadow-sm">
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-bold text-[#1A1A1A]">{order.shopName}</h3>
-                    <span className={`px-2.5 py-1 rounded-full text-[12px] font-medium flex items-center gap-1 ${getStatusColor(order.status)}`}>
+                    <h3 className="font-bold text-[#1A1A1A]">
+                      {order.orderNumber || `#${order.id.slice(-6).toUpperCase()}`}
+                    </h3>
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-[12px] font-medium flex items-center gap-1 ${getStatusColor(order.status)}`}
+                    >
                       {getStatusIcon(order.status)}
                       {order.status}
                     </span>
                   </div>
-                  <p className="text-[14px] text-gray-600 mb-1">{order.orderNumber}</p>
-                  <p className="text-[12px] text-gray-500">{order.shopAddress}</p>
+                  <p className="text-[14px] text-gray-600 mb-0.5">
+                    {order.items?.length || 0} items
+                  </p>
+                  <p className="text-[12px] text-gray-400">{formatDate(order.createdAt)}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-[#1A1A1A] text-[20px]">
-                    ₹{order.amount.toLocaleString("en-IN")}
+                    ₹{(order.totalAmount || 0).toLocaleString("en-IN")}
                   </p>
-                  <p className={`text-[12px] font-medium ${getPaymentColor(order.paymentStatus)}`}>
-                    {order.paymentStatus}
-                  </p>
+                  {order.deliveryDays && (
+                    <p className="text-[12px] text-gray-500 mt-1">
+                      Delivery: {order.deliveryDays} days
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -283,11 +234,11 @@ export function WholesalerOrders() {
                 <div className="flex items-center gap-4">
                   <div>
                     <p className="text-[12px] text-gray-600">Items</p>
-                    <p className="text-[#1A1A1A] font-medium">{order.itemCount}</p>
+                    <p className="text-[#1A1A1A] font-medium">{order.items?.length || 0}</p>
                   </div>
                   <div>
                     <p className="text-[12px] text-gray-600">Date</p>
-                    <p className="text-[#1A1A1A] font-medium">{order.date}</p>
+                    <p className="text-[#1A1A1A] font-medium">{formatDate(order.createdAt)}</p>
                   </div>
                 </div>
                 <button
