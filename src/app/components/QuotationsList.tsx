@@ -26,9 +26,7 @@ export function QuotationsList() {
 
     const q = query(
       collection(db, "bids"),
-      where("shopkeeperId", "==", user.id),
-      orderBy("status", "asc"), // Active first
-      orderBy("createdAt", "desc")
+      where("shopkeeperId", "==", user.id)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -36,6 +34,25 @@ export function QuotationsList() {
       snapshot.forEach((doc) => {
         b.push({ id: doc.id, ...doc.data() } as Bid);
       });
+      
+      // Sort in-memory: Active first, then by createdAt desc
+      b.sort((a, b) => {
+        if (a.status !== b.status) {
+          return a.status === "active" ? -1 : 1;
+        }
+        
+        let timeA = 0;
+        let timeB = 0;
+        
+        if (a.createdAt) {
+           timeA = a.createdAt.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime();
+        }
+        if (b.createdAt) {
+           timeB = b.createdAt.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime();
+        }
+        return timeB - timeA;
+      });
+      
       setBids(b);
       setLoading(false);
     }, (error) => {
