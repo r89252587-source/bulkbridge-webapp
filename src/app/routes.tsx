@@ -18,6 +18,7 @@ import { SendQuotation } from "./components/SendQuotation";
 import { Notifications } from "./components/Notifications";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { QuotationsList } from "./components/QuotationsList";
+import { SelectShopType } from "./components/SelectShopType";
 
 export const router = createBrowserRouter([
   {
@@ -39,6 +40,10 @@ export const router = createBrowserRouter([
   {
     path: "/select-user-type",
     Component: SelectUserType,
+  },
+  {
+    path: "/select-shop-type",
+    Component: SelectShopType,
   },
 
   // ── Shopkeeper routes ──────────────────────────────────

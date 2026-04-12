@@ -14,8 +14,7 @@ import {
   LogOut,
   Store,
   Home,
-  ListOrdered,
-  MessageSquareQuote,
+  ShoppingCart,
 } from "lucide-react";
 
 export function ShopkeeperProfile() {
@@ -233,32 +232,34 @@ export function ShopkeeperProfile() {
       </div>
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-around">
-        <button
-          onClick={() => navigate("/dashboard/shopkeeper")}
-          className="flex flex-col items-center gap-1 text-gray-500"
-        >
-          <Home className="w-6 h-6" />
-          <span className="text-[12px]">Home</span>
-        </button>
-        <button
-          onClick={() => navigate("/orders/shopkeeper")}
-          className="flex flex-col items-center gap-1 text-gray-500"
-        >
-          <ListOrdered className="w-6 h-6" />
-          <span className="text-[12px]">Orders</span>
-        </button>
-        <button
-          onClick={() => navigate("/quotations")}
-          className="flex flex-col items-center gap-1 text-gray-500"
-        >
-          <MessageSquareQuote className="w-6 h-6" />
-          <span className="text-[12px]">Quotes</span>
-        </button>
-        <button className="flex flex-col items-center gap-1 text-[#E8453C]">
-          <User className="w-6 h-6" />
-          <span className="text-[12px]">Profile</span>
-        </button>
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3">
+        <div className="flex items-center justify-around max-w-md mx-auto">
+          <button
+            onClick={() => navigate("/dashboard/shopkeeper")}
+            className="flex flex-col items-center gap-1 text-[#6B6B6B]"
+          >
+            <Home className="w-6 h-6" />
+            <span className="text-[11px]">Home</span>
+          </button>
+          <button
+            onClick={() => navigate("/orders/shopkeeper")}
+            className="flex flex-col items-center gap-1 text-[#6B6B6B]"
+          >
+            <FileText className="w-6 h-6" />
+            <span className="text-[11px]">Orders</span>
+          </button>
+          <button
+            onClick={() => navigate("/quotations")}
+            className="flex flex-col items-center gap-1 text-[#6B6B6B]"
+          >
+            <ShoppingCart className="w-6 h-6" />
+            <span className="text-[11px]">Quotes</span>
+          </button>
+          <button className="flex flex-col items-center gap-1 text-[#E8453C]">
+            <User className="w-6 h-6" />
+            <span className="text-[11px] font-medium">Profile</span>
+          </button>
+        </div>
       </div>
     </div>
   );

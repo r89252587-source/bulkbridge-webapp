@@ -44,7 +44,13 @@ export function QuotationsComparison() {
       try {
         const docSnap = await getDoc(doc(db, "bids", orderId));
         if (docSnap.exists()) {
-          setBid({ id: docSnap.id, ...docSnap.data() });
+          const data = docSnap.data();
+          setBid({ 
+            id: docSnap.id, 
+            ...data,
+            items: data.items || [],
+            title: data.title || `${data.category} List`
+          });
         }
       } catch (err) {
         console.error("Error fetching original bid", err);

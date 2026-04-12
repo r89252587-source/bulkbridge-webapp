@@ -8,6 +8,9 @@ export function SelectUserType() {
 
   // If user already has a type, redirect to appropriate dashboard
   if (user?.userType === "shopkeeper") {
+    if (!user.shopType) {
+      return <Navigate to="/select-shop-type" replace />;
+    }
     return <Navigate to="/dashboard/shopkeeper" replace />;
   } else if (user?.userType === "wholesaler") {
     return <Navigate to="/wholesaler" replace />;
@@ -16,7 +19,7 @@ export function SelectUserType() {
   const handleSelectType = async (type: "shopkeeper" | "wholesaler") => {
     await setUserType(type);
     if (type === "shopkeeper") {
-      navigate("/dashboard/shopkeeper");
+      navigate("/select-shop-type");
     } else {
       navigate("/wholesaler");
     }

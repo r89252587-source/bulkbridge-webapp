@@ -31,5 +31,10 @@ export function ProtectedRoute({ children, requiredUserType }: ProtectedRoutePro
     return <Navigate to={redirectPath} replace />;
   }
 
+  // If shopkeeper hasn't selected shop type, redirect them
+  if (user.userType === "shopkeeper" && !user.shopType) {
+    return <Navigate to="/select-shop-type" replace />;
+  }
+
   return <>{children}</>;
 }

@@ -9,10 +9,11 @@ interface Bid {
   id: string;
   category: string;
   items: any[];
-  total: number;
+  totalEstimatedAmount: number;
   status: string;
   createdAt: any;
   deliveryDate: string;
+  title?: string;
 }
 
 export function QuotationsList() {
@@ -32,7 +33,15 @@ export function QuotationsList() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const b: Bid[] = [];
       snapshot.forEach((doc) => {
-        b.push({ id: doc.id, ...doc.data() } as Bid);
+        const data = doc.data();
+        b.push({ 
+          id: doc.id, 
+          ...data,
+          totalEstimatedAmount: data.totalEstimatedAmount || data.total || 0,
+          items: data.items || [],
+          category: data.category || "Order",
+          status: data.status || "active"
+        } as Bid);
       });
       
       // Sort in-memory: Active first, then by createdAt desc
@@ -107,7 +116,7 @@ export function QuotationsList() {
                     <ShoppingCart className="text-[#E8453C]" size={22} />
                   </div>
                   <div>
-                    <h3 className="text-[#1A1A1A] font-bold">{bid.category} List</h3>
+                    <h3 className="text-[#1A1A1A] font-bold">{bid.title || `${bid.category} List`}</h3>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded ${
                         bid.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
@@ -115,14 +124,14 @@ export function QuotationsList() {
                         {bid.status}
                       </span>
                       <span className="text-[12px] text-[#6B6B6B]">
-                        {bid.items.length} items
+                        {bid.items?.length || 0} items
                       </span>
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
+                 <div className="text-right">
                   <p className="text-[11px] text-[#6B6B6B]">Budget Est.</p>
-                  <p className="text-[18px] font-bold text-[#1A1A1A]">₹{bid.total.toLocaleString('en-IN')}</p>
+                  <p className="text-[18px] font-bold text-[#1A1A1A]">₹{(bid.totalEstimatedAmount || 0).toLocaleString('en-IN')}</p>
                 </div>
               </div>
 

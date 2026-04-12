@@ -24,5 +24,9 @@ export function RootRedirect() {
     return <Navigate to="/wholesaler" replace />;
   }
 
+  if (!user.shopType) {
+    return <Navigate to="/select-shop-type" replace />;
+  }
+
   return <Navigate to="/dashboard/shopkeeper" replace />;
 }

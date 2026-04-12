@@ -22,6 +22,8 @@ interface User {
   businessName?: string;
   address?: string;
   gstNumber?: string;
+  shopType?: string;
+  shopDescription?: string;
 }
 
 interface AuthContextType {
@@ -33,6 +35,7 @@ interface AuthContextType {
   signup: (email: string, password: string, name: string) => Promise<boolean>;
   logout: () => void;
   setUserType: (type: UserType) => Promise<void>;
+  setShopType: (type: string) => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
 }
 
@@ -177,6 +180,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const setShopType = async (type: string) => {
+    if (user) {
+      try {
+        await updateDoc(doc(db, "users", user.id), { shopType: type });
+        setUser({ ...user, shopType: type });
+      } catch (error) {
+        console.error("Set shop type error:", error);
+      }
+    }
+  };
+
   const updateProfile = async (data: Partial<User>) => {
     if (user) {
       try {
@@ -199,6 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signup,
         logout,
         setUserType,
+        setShopType,
         updateProfile,
       }}
     >
